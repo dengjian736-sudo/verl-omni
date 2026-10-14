@@ -1,6 +1,6 @@
 # NPU Smoke Tests
 
-Last updated: 10/08/2026.
+Last updated: 10/14/2026.
 
 This guide explains how to add CI test cases for Huawei Ascend devices in verl-omni.
 
@@ -14,12 +14,11 @@ The common local runner is
 | ID | Name | Test entry point | Default NPUs | Status |
 |---|---|---|---:|---|
 | 0 | vLLM-Omni rollout + sleep/wake-up | `tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_npu.py` | 8 | Enabled |
-| 1 | Qwen-Image FlowGRPO trainer e2e | `tests/special_e2e/run_flowgrpo_qwen_image_npu.sh` | 8 | Temporarily skipped |
+| 1 | Qwen-Image FlowGRPO trainer e2e | `tests/special_e2e/run_flowgrpo_qwen_image_npu.sh` | 8 | Enabled |
 
-Test 1 remains registered in both the runner and workflow. However,
-`run_npu_smoke_tests.sh` currently forces `RUN_TEST[1]=0`, so the test is
-reported as `SKIP`. Remove this temporary override after the FlowGRPO runtime
-issue is resolved.
+Both tests run by default; explicit test IDs select a subset. Test 1 requires
+an even NPU count of at least 2 because its rollout uses tensor parallel size 2.
+Use `--num-npus 2` for an A3 pair.
 
 ## Add a New NPU Smoke Test
 
@@ -214,8 +213,7 @@ ASCEND_RT_VISIBLE_DEVICES=0,2,4,6 NUM_NPUS=4 \
   bash tests/npu_smoke/run_npu_smoke_tests.sh 0
 ```
 
-While Test 1 is disabled, requesting it reports `SKIP` without starting
-FlowGRPO:
+Run Test 1 through the same runner:
 
 ```bash
 bash tests/npu_smoke/run_npu_smoke_tests.sh --num-npus 8 1
@@ -226,6 +224,21 @@ After registering Test 2, run it independently:
 ```bash
 bash tests/npu_smoke/run_npu_smoke_tests.sh --num-npus 8 2
 ```
+
+Run both tests on an A3 pair with a cached local checkpoint:
+
+```bash
+MODEL_PATH=/root/models/tiny-random/Qwen-Image \
+  bash tests/npu_smoke/run_npu_smoke_tests.sh --num-npus 2
+```
+
+The smoke runner sets `HF_HUB_OFFLINE=0` because engine-default extraction
+constructs `OmniEngineArgs(model="")`, which fails in HF offline mode with the
+current stack. This is a compatibility workaround, not an offline-mode fix.
+This setting permits Hub access; it does not require downloading models.
+Test 1 requires existing local model/tokenizer directories and propagates
+this setting and `ASCEND_VISIBLE_DEVICES` to Ray workers. Its generated data is
+stored under the run's log directory unless `DATA_DIR` is explicitly provided.
 
 Logs are written to `logs/npu_smoke/<timestamp>/`. Check `summary.log`
 first, then inspect the corresponding `test_<id>.log` for a failed test.
@@ -282,8 +295,7 @@ Pull-request labels select the requested test scope:
 | `ci-npu-rollout` | rollout | Test 0 |
 | `ci-npu-flowgrpo` | flowgrpo | Test 1 |
 
-While Test 1 is disabled, the runner reports it as `SKIP` even when the
-workflow requests it.
+Workflow-selected Test 1 executes normally instead of being forced to `SKIP`.
 
 ## Runtime Environment
 
