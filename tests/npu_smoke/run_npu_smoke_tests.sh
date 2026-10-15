@@ -30,6 +30,8 @@ export PYTHONUNBUFFERED=1
 export RAY_DEDUP_LOGS=0
 export DEVICE_NAME=npu
 export RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES=1
+# Avoid fixed HCCL device-port conflicts in multi-process NPU tests.
+export HCCL_NPU_SOCKET_PORT_RANGE="${HCCL_NPU_SOCKET_PORT_RANGE:-auto}"
 # EngineArgs default extraction uses an empty model name, which vLLM rejects
 # in HF offline mode. Tests still load their checkpoints from local paths.
 export HF_HUB_OFFLINE=0
