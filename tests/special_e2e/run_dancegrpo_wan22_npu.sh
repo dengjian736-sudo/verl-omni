@@ -17,6 +17,7 @@ TRAIN_BATCH_SIZE=$((MINI_BATCH_SIZE * N_RESP_PER_PROMPT))
 CUSTOM_CHAT_TEMPLATE='"{% if messages %}{% for message in messages %}{% if message[\"role\"] == \"user\" %}{{ message[\"content\"] }}{% endif %}{% endfor %}{% endif %}</s>"'
 
 export ASCEND_RT_VISIBLE_DEVICES=${ASCEND_RT_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}
+export ASCEND_VISIBLE_DEVICES="${ASCEND_VISIBLE_DEVICES:-${ASCEND_RT_VISIBLE_DEVICES}}"
 export DEVICE_NAME=npu
 export RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES=1
 export VERL_DATAPROTO_SERIALIZATION_METHOD=numpy
@@ -102,6 +103,7 @@ python3 -m verl_omni.trainer.main_diffusion \
     trainer.test_freq=-1 \
     trainer.resume_mode=disable \
     trainer.total_training_steps="${TOTAL_TRAIN_STEPS}" \
+    "++ray_kwargs.ray_init.runtime_env.env_vars.ASCEND_VISIBLE_DEVICES=\"${ASCEND_VISIBLE_DEVICES}\"" \
     "$@"
 
 echo "DanceGRPO Wan2.2 NPU e2e test passed (training completed successfully)."
