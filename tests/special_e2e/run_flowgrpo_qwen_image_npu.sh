@@ -42,7 +42,7 @@ export HF_HUB_OFFLINE=0
 
 echo "===== Source Ascend environment (Test 1) ====="
 set +u
-source /usr/local/Ascend/cann-9.1.0/set_env.sh
+source "${ASCEND_HOME_PATH:-/usr/local/Ascend/ascend-toolkit/latest}/set_env.sh"
 source /usr/local/Ascend/nnal/atb/set_env.sh
 set -u
 echo "===== Ascend environment after source ====="
