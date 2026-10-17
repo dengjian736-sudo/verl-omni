@@ -153,18 +153,19 @@ def create_training_config(
 
 
 def create_data_samples(num_device: int, model_config: DiffusionModelConfig) -> DataProto:
+    """Build synthetic trajectories matching the loaded Qwen-Image transformer."""
     from tensordict import TensorDict
 
     scheduler = build_scheduler(model_config)
 
     batch_size = 8 * num_device
     seq_len = 64
-    latent_dim = 64
-    encoder_latent_dim = 32
+    latent_dim = model_config.transformer_config["in_channels"]
+    encoder_latent_dim = model_config.transformer_config["joint_attention_dim"]
     vae_scale_factor = 8
     height, width = 512, 512
     latent_height, latent_width = height // vae_scale_factor // 2, width // vae_scale_factor // 2
-    num_diffusion_steps = 10
+    num_diffusion_steps = scheduler.timesteps.numel()
     timesteps = scheduler.timesteps[None].repeat(batch_size, 1)
 
     torch.manual_seed(1)
