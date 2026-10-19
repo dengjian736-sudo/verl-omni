@@ -192,7 +192,7 @@ teardown after a successful workload. The runner accepts 134 only when the
 test-specific positive completion markers are present. Earlier aborts, missing
 markers, and other exit codes remain failures.
 
-For Test 3, this compatibility rule requires exactly one passed pytest case
+For Tests 0 and 3, the shared compatibility rule requires exactly one passed pytest case
 with no failures, errors, or skips in the final summary, followed by the known
 `corrupted size vs. prev_size` diagnostic and exit code 134. The runner emits a
 warning and preserves the log. This handles the observed CI teardown failure;
