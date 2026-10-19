@@ -1,6 +1,6 @@
 # NPU Smoke Tests
 
-Last updated: 10/17/2026.
+Last updated: 10/19/2026.
 
 This guide explains how to add CI test cases for Huawei Ascend devices in verl-omni.
 
@@ -61,7 +61,7 @@ Keep tests small and reproducible:
 Add core tests to run_npu_smoke_core.sh and trainer tests to
 run_npu_smoke_e2e.sh. Assign the next unused numeric ID and call run_test:
 
-    run_test 3 "my NPU smoke test"         env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}"             NUM_NPUS="${NUM_NPUS}"         pytest -s tests/workers/test_my_npu_feature.py
+    run_test 4 "my NPU smoke test"         env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}"             NUM_NPUS="${NUM_NPUS}"         pytest -s tests/workers/test_my_npu_feature.py
 
 Do not reuse an existing ID. Adding a test to an existing group needs no
 workflow mapping change.
