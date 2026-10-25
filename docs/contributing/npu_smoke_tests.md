@@ -1,6 +1,6 @@
 # NPU Smoke Tests
 
-Last updated: 10/21/2026.
+Last updated: 10/25/2026.
 
 This guide explains how to add CI test cases for Huawei Ascend devices in verl-omni.
 
@@ -47,9 +47,6 @@ The same case runs through `run_npu_smoke_core.sh` and the combined
 `run_npu_smoke_tests.sh` entry point. Missing hardware or model files fail
 explicitly rather than producing an all-skipped smoke success.
 
-The GPU-to-NPU scope and remaining gaps are tracked in
-[NPU smoke coverage](npu_smoke_coverage.md).
-
 Tests 4-6 reuse the GPU tests' execution and assertions. Test 4 contains two
 pytest cases (`request_execution` and `step_execution`); Tests 5 and 6 each
 contain one. They require an even `NUM_NPUS` of at least 2, use rollout TP=2,
@@ -83,12 +80,15 @@ python3 -m pytest -v -s tests/agent_loop/test_diffusion_agent_loop_npu.py
 For a two-device local check, set both visibility variables to `0,1` and
 `NUM_NPUS=2`. The existing core and combined runners also select Tests 4-6.
 Each case owns a fresh local Ray cluster and restores the agent worker factory
-afterward. Nonzero exits, including teardown aborts for these new IDs, remain
-failures. On an eight-NPU A3 machine, commit `5926e66` passed the four new
-pytest cases (`4 passed, 22 warnings`, exit 0), core entries 0/4/5/6, and
-the combined smoke entry point (exit 0). That run preceded the merge of
-entry 3 from PR #770; the seven-entry combined suite still needs a fresh
-integrated run and validation on the workflow's A2 runner.
+afterward. Nonzero exits remain failures except for the narrowly classified
+post-pytest teardown abort described below. On an eight-NPU A3 machine, commit
+`5926e66` passed the four new pytest cases (`4 passed, 22 warnings`, exit 0),
+core entries 0/4/5/6, and the combined smoke entry point (exit 0). That run
+preceded the merge of entry 3 from PR #770. On the workflow's eight-NPU A2
+runner at `86f22a4`, all seven entries reached their pytest or training
+completion markers, but core entries 4-6 were classified as failures after a
+native teardown abort.
+The updated runner classification still needs validation in an A2 CI rerun.
 
 ## Add a New NPU Smoke Test
 
@@ -244,8 +244,10 @@ teardown after a successful workload. The runner accepts 134 only when the
 test-specific positive completion markers are present. Earlier aborts, missing
 markers, and other exit codes remain failures.
 
-For Tests 0 and 3, the shared compatibility rule requires exactly one passed pytest case
-with no failures, errors, or skips in the final summary, followed by the known
-`corrupted size vs. prev_size` diagnostic and exit code 134. The runner emits a
-warning and preserves the log. This handles the observed CI teardown failure;
-it does not fix the underlying native memory issue.
+For Tests 0, 3, 5, and 6, the shared compatibility rule requires exactly one
+passed pytest case; Test 4 requires exactly two. It also requires no failures,
+errors, or skips in the final summary, only the known
+`corrupted size vs. prev_size` diagnostic after that summary, and exit code
+134. The runner emits a warning and preserves the log. This handles the
+observed CI teardown failure; it does not fix the underlying native memory
+issue.
