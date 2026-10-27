@@ -1,6 +1,6 @@
 # NPU Smoke Tests
 
-Last updated: 10/25/2026.
+Last updated: 10/27/2026.
 
 This guide explains how to add CI test cases for Huawei Ascend devices in verl-omni.
 
@@ -23,8 +23,9 @@ into these runners:
 | 4 | core | Diffusion agent loop, request and step execution | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_diffusion_single_turn_npu | 8 |
 | 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 8 |
 | 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 8 |
+| 11 | core | Standalone vLLM reward engine and OCR scoring | tests/special_e2e/run_reward_engine_npu.sh | 8 |
 
-The combined runner has seven entries: five core (0, 3, 4, 5, 6) and two e2e
+The combined runner has eight entries: six core (0, 3, 4, 5, 6, 11) and two e2e
 (1, 2). Entries 4-6 add four pytest cases because entry 4 is parametrized.
 
 Test 3 ports the `fsdp` case of `tests/workers/test_diffusers_fsdp_engine.py`
@@ -90,6 +91,46 @@ completion markers, but core entries 4-6 were classified as failures after a
 native teardown abort.
 The updated runner classification still needs validation in an A2 CI rerun.
 
+### Standalone reward engine
+
+Test 11 ports `tests/reward_loop/test_visual_reward_manager.py::test_reward_model_genrm`.
+It starts reward-model servers through `RewardLoopManager` with a dedicated
+resource pool and `rollout.name=vllm`; no actor rollout server is created.
+A local random Qwen2.5-VL checkpoint exercises the architecture involved in
+issue #791 without downloading the full reward model. Each launch uses a new,
+test-owned `VLLM_CACHE_ROOT`, so existing architecture-inspection caches cannot
+hide cold-start failures.
+
+At eight NPUs the test starts four TP=2 reward replicas, checks each `/v1/models`
+endpoint, and scores three synthetic images through the reward router and the
+existing OCR scorer. It requires finite `(3, 1)` scores in `[0, 1]` and one model
+response per image. Random weights do not test OCR quality or convergence.
+The dedicated servers stay resident (`free_cache_engine=False`); reward-model
+offload and sleep/wake behavior are outside this case. All nonzero exits,
+including native abort 134, remain failures for this entry.
+
+```bash
+NUM_NPUS=8 bash tests/special_e2e/run_reward_engine_npu.sh
+```
+
+The launcher builds its own checkpoint under
+`~/.cache/verl-omni-npu-smoke/Qwen2.5-VL-Reward-NPU`. Set
+`NPU_REWARD_MODEL_PATH` to select another empty output directory owned by this
+test. Existing unrelated or incomplete directories are rejected rather than
+overwritten. Keep the final pytest result and process exit code when reporting
+whether the cold reward-server path succeeds on a given environment.
+
+On an eight-device Ascend 910B2 server, this case passed in 178.83 seconds with
+exit 0 using the image's jemalloc preload from `/root/.bashrc`. Noninteractive
+shells do not load that file automatically. The combined eight-entry smoke also
+passed with core and e2e exit 0; no teardown-abort classification was used.
+In fresh-cache `ModelConfig` probes,
+removing `LD_PRELOAD` reproduced the #791 architecture-inspection failure in
+three of three runs; explicitly preloading jemalloc passed three of three.
+These results identify an environment-sensitive failure mode, not a repair of
+the underlying native heap corruption. The launcher does not select an allocator
+or suppress failures; retain the allocator setup when recording run conditions.
+
 ## Add a New NPU Smoke Test
 
 ### 1. Add the smallest useful entry point
@@ -108,9 +149,9 @@ Keep tests small and reproducible:
 ### 2. Register the test in its group runner
 
 Add core tests to run_npu_smoke_core.sh and trainer tests to
-run_npu_smoke_e2e.sh. Assign the next unused numeric ID and call run_test:
+run_npu_smoke_e2e.sh. Assign an unused numeric ID and call run_test:
 
-    run_test 7 "my NPU smoke test" \
+    run_test 12 "my NPU smoke test" \
         env ASCEND_RT_VISIBLE_DEVICES="${ASCEND_RT_VISIBLE_DEVICES}" \
             NUM_NPUS="${NUM_NPUS}" \
         pytest -s tests/workers/test_my_npu_feature.py
