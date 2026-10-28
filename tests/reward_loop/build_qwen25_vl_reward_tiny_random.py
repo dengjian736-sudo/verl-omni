@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 from pathlib import Path
 
@@ -28,12 +27,8 @@ from transformers import (
     Qwen2VLVideoProcessor,
 )
 
-if __package__:
-    from .build_qwen_image_tiny_random import _build_tiny_chatml_tokenizer
-else:
-    from build_qwen_image_tiny_random import _build_tiny_chatml_tokenizer
+from tests.special_e2e.build_qwen_image_tiny_random import _build_tiny_chatml_tokenizer
 
-DEFAULT_OUTPUT_DIR = Path.home() / ".cache/verl-omni-npu-smoke/Qwen2.5-VL-Reward-NPU"
 _METADATA_FILE = "tiny_reward_checkpoint_metadata.json"
 _REQUIRED_FILES = (
     "config.json",
@@ -121,16 +116,3 @@ def ensure_tiny_qwen25_vl_reward_checkpoint(output_dir: str | Path, *, seed: int
     processor.save_pretrained(output_dir)
     (output_dir / _METADATA_FILE).write_text(json.dumps(metadata, indent=2) + "\n")
     return output_dir
-
-
-def main() -> None:
-    """Build the local fixture used by the NPU reward-engine integration test."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
-    parser.add_argument("--seed", type=int, default=42)
-    args = parser.parse_args()
-    print(ensure_tiny_qwen25_vl_reward_checkpoint(args.output_dir, seed=args.seed))
-
-
-if __name__ == "__main__":
-    main()

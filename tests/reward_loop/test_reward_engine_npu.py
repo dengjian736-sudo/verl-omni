@@ -19,12 +19,53 @@ from pathlib import Path
 import pytest
 
 
-def test_standalone_reward_engine_npu():
+@pytest.fixture
+def npu_reward_checkpoint(monkeypatch, tmp_path_factory):
+    """Prepare an offline checkpoint and a cold, test-owned vLLM registry cache."""
+    try:
+        requested = int(os.environ.get("NUM_NPUS", "8"))
+    except ValueError:
+        pytest.fail("NUM_NPUS must be an integer.")
+    if requested < 2 or requested % 2:
+        pytest.fail("NUM_NPUS must be even and at least two.")
+
+    visible_devices = os.environ.get("ASCEND_RT_VISIBLE_DEVICES") or ",".join(str(i) for i in range(requested))
+    env_vars = {
+        "DEVICE_NAME": "npu",
+        "ASCEND_RT_VISIBLE_DEVICES": visible_devices,
+        "ASCEND_VISIBLE_DEVICES": os.environ.get("ASCEND_VISIBLE_DEVICES") or visible_devices,
+        "RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES": "1",
+        "HCCL_NPU_SOCKET_PORT_RANGE": os.environ.get("HCCL_NPU_SOCKET_PORT_RANGE") or "auto",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TOKENIZERS_PARALLELISM": "false",
+        "VLLM_ASCEND_ENABLE_NZ": "0",
+        "VLLM_CACHE_ROOT": str(tmp_path_factory.mktemp("reward-registry")),
+    }
+    for key, value in env_vars.items():
+        monkeypatch.setenv(key, value)
+
+    import torch
+    import torch_npu  # noqa: F401
+
+    if not torch.npu.is_available() or requested > torch.npu.device_count():
+        pytest.fail("The standalone reward smoke requires at least NUM_NPUS visible Ascend NPUs.")
+
+    from tests.reward_loop.build_qwen25_vl_reward_tiny_random import ensure_tiny_qwen25_vl_reward_checkpoint
+
+    model_path = Path(
+        os.environ.get("NPU_REWARD_MODEL_PATH", "~/.cache/verl-omni-npu-smoke/Qwen2.5-VL-Reward-NPU")
+    ).expanduser()
+    model_path = ensure_tiny_qwen25_vl_reward_checkpoint(model_path).resolve()
+    print(f"Reward model-inspection cache: {env_vars['VLLM_CACHE_ROOT']}")
+    return requested, model_path
+
+
+def test_standalone_reward_engine_npu(npu_reward_checkpoint):
     """Port the GPU GenRM path without starting an actor rollout server."""
     import ray
     import requests
     import torch
-    import torch_npu  # noqa: F401
     from hydra import compose, initialize_config_dir
     from omegaconf import open_dict
     from verl.experimental.reward_loop import RewardLoopManager
@@ -32,16 +73,9 @@ def test_standalone_reward_engine_npu():
     from verl.utils import hf_tokenizer
     from verl.workers.rollout.replica import RolloutMode
 
-    if not torch.npu.is_available():
-        pytest.fail("The standalone reward smoke requires Ascend NPUs.")
-    requested = int(os.environ.get("NUM_NPUS", "8"))
-    if requested < 2 or requested % 2 or requested > torch.npu.device_count():
-        pytest.fail("NUM_NPUS must be even, at least two, and no greater than the visible NPU count.")
+    requested, model_path = npu_reward_checkpoint
     if ray.is_initialized():
         pytest.fail("Run this test without an existing Ray connection.")
-    model_path = Path(os.environ["NPU_REWARD_MODEL_PATH"]).expanduser().resolve()
-    assert (model_path / "tiny_reward_checkpoint_metadata.json").is_file()
-    assert os.environ.get("VLLM_CACHE_ROOT"), "Use the launcher to isolate model-inspection caches."
 
     repo_root = Path(__file__).resolve().parents[2]
     with initialize_config_dir(config_dir=str(repo_root / "verl_omni/trainer/config"), version_base="1.3"):
