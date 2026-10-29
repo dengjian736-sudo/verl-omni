@@ -121,6 +121,7 @@ def test_standalone_reward_engine_npu(npu_reward_checkpoint):
             "ASCEND_VISIBLE_DEVICES",
             "VLLM_CACHE_ROOT",
             "PYTHONPATH",
+            "HCCL_NPU_SOCKET_PORT_RANGE",
         )
         if key in os.environ
     }
@@ -128,7 +129,6 @@ def test_standalone_reward_engine_npu(npu_reward_checkpoint):
         {
             "DEVICE_NAME": "npu",
             "RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES": "1",
-            "HCCL_NPU_SOCKET_PORT_RANGE": "auto",
             "HF_HUB_OFFLINE": "1",
             "TRANSFORMERS_OFFLINE": "1",
             "TOKENIZERS_PARALLELISM": "false",

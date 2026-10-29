@@ -1,6 +1,6 @@
 # NPU Smoke Tests
 
-Last updated: 10/28/2026.
+Last updated: 10/29/2026.
 
 This guide explains how to add CI test cases for Huawei Ascend devices in verl-omni.
 
@@ -18,7 +18,7 @@ into these runners:
 |---|---|---|---|---:|
 | 0 | core | vLLM-Omni rollout + sleep/wake-up | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_npu.py | 8 |
 | 1 | e2e | Qwen-Image FlowGRPO trainer | tests/special_e2e/run_flowgrpo_qwen_image_npu.sh | 8 |
-| 2 | e2e | Wan2.2 DanceGRPO trainer | tests/special_e2e/run_dancegrpo_wan22_npu.sh | 8 |
+| 2 | e2e | Wan2.2 DanceGRPO trainer with Qwen2.5-VL reward | tests/special_e2e/run_dancegrpo_wan22_npu.sh | 8 |
 | 3 | core | Diffusers FSDP engine inference and training | tests/workers/test_diffusers_fsdp_engine_npu.py | 8 |
 | 4 | core | Diffusion agent loop, request and step execution | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_diffusion_single_turn_npu | 8 |
 | 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 8 |
@@ -69,7 +69,8 @@ python3 tests/special_e2e/build_qwen_image_tiny_random.py \
     --output-dir "${HOME}/.cache/modelscope/hub/models/tiny-random/Qwen-Image"
 ```
 
-After sourcing CANN and ATB, run just the new cases from the repository root:
+After configuring the [runtime environment](#runtime-environment), run just the
+new cases from the repository root:
 
 ```bash
 export DEVICE_NAME=npu NUM_NPUS=8
@@ -83,23 +84,15 @@ python3 -m pytest -v -s tests/agent_loop/test_diffusion_agent_loop_npu.py
 For a two-device local check, set both visibility variables to `0,1` and
 `NUM_NPUS=2`. The existing core and combined runners also select Tests 4-6.
 Each case owns a fresh local Ray cluster and restores the agent worker factory
-afterward. Nonzero exits remain failures except for the narrowly classified
-post-pytest teardown abort described below. On an eight-NPU A3 machine, commit
-`5926e66` passed the four new pytest cases (`4 passed, 22 warnings`, exit 0),
-core entries 0/4/5/6, and the combined smoke entry point (exit 0). That run
-preceded the merge of entry 3 from PR #770. On the workflow's eight-NPU A2
-runner at `86f22a4`, all seven entries reached their pytest or training
-completion markers, but core entries 4-6 were classified as failures after a
-native teardown abort.
-The updated runner classification still needs validation in an A2 CI rerun.
+afterward. Every nonzero test exit fails the smoke group.
 
 ### Standalone reward engine
 
 Test 7 ports `tests/reward_loop/test_visual_reward_manager.py::test_reward_model_genrm`.
 It starts reward-model servers through `RewardLoopManager` with a dedicated
 resource pool and `rollout.name=vllm`; no actor rollout server is created.
-A local random Qwen2.5-VL checkpoint exercises the architecture involved in
-issue #791 without downloading the full reward model. Each launch uses a new,
+A local random Qwen2.5-VL checkpoint exercises model inspection and server
+startup without downloading the full reward model. Each launch uses a new,
 test-owned `VLLM_CACHE_ROOT`, so existing architecture-inspection caches cannot
 hide cold-start failures.
 
@@ -110,6 +103,9 @@ response per image. Random weights do not test OCR quality or convergence.
 The dedicated servers stay resident (`free_cache_engine=False`); reward-model
 offload and sleep/wake behavior are outside this case. All nonzero exits,
 including native abort 134, remain failures for this entry.
+
+For direct execution, configure the [runtime environment](#runtime-environment)
+before launching Python.
 
 ```bash
 NUM_NPUS=8 python3 -m pytest -v -s tests/reward_loop/test_reward_engine_npu.py
@@ -125,18 +121,18 @@ pytest directly, with no separate end-to-end launcher. Keep the final pytest
 result and process exit code when reporting whether the cold reward-server
 path succeeds on a given environment.
 
-Before the pytest-fixture refactor, the reward case in `2c2f23f` passed on an
-eight-device Ascend 910B2 server in 178.83 seconds with exit 0, using the image's
-jemalloc preload from `/root/.bashrc`. Noninteractive shells do not load that
-file automatically. The combined eight-entry smoke also passed with core and
-e2e exit 0; no teardown-abort classification was used. The refactored entry
-still needs an eight-NPU runtime rerun.
-In fresh-cache `ModelConfig` probes,
-removing `LD_PRELOAD` reproduced the #791 architecture-inspection failure in
-three of three runs; explicitly preloading jemalloc passed three of three.
-These results identify an environment-sensitive failure mode, not a repair of
-the underlying native heap corruption. The fixture does not select an allocator
-or suppress failures; retain the allocator setup when recording run conditions.
+### Wan2.2 trainer with a reward model
+
+Test 2 runs one DanceGRPO training step with dedicated actor and reward
+resources. With the default eight NPUs, six devices serve the diffusion actor
+and two serve a TP=2 Qwen2.5-VL reward engine. The workload scores generated
+images through the GenRM OCR scorer and must finish training successfully.
+
+The launcher uses a cached Qwen2.5-VL-3B-Instruct snapshot when available;
+otherwise it selects the Hugging Face model ID. Prepare the checkpoint before
+an offline run and set `REWARD_MODEL_PATH` to its local directory when needed.
+`ACTOR_NUM_NPUS` and `REWARD_NUM_NPUS` override the resource split.
+This trainer path complements Test 7's isolated tiny-model reward assertions.
 
 ## Add a New NPU Smoke Test
 
@@ -285,6 +281,17 @@ Set `ASCEND_HOME_PATH` to the toolkit directory for a custom installation.
 If it is unset or empty, the launchers use the `latest` symlink. The selected
 CANN version must remain compatible with the image's PyTorch and torch-npu.
 
+Both group runners source `lib_npu_smoke.sh`, which defaults `VLLM_PLUGINS`
+to `ascend` and preloads jemalloc before starting the tests. If jemalloc is
+not already in `LD_PRELOAD`, the library uses `JEMALLOC_PATH` or discovers a
+readable library through `ldconfig`; a missing library fails the run. Set
+`JEMALLOC_PATH` for a custom installation.
+
+For direct pytest execution outside a group runner, export `VLLM_PLUGINS=ascend`
+and preload the installed jemalloc library before launching Python. The
+reward fixture supplies device and offline defaults and passes the configured
+`HCCL_NPU_SOCKET_PORT_RANGE` to Ray workers. It defaults to `auto` when unset.
+
 The diagnostics and artifact-upload steps are defined directly in the workflow.
 The NPU runner executes the job in a container, so repository-local composite
 actions may otherwise be resolved against a different host workspace.
@@ -307,15 +314,6 @@ also writes group console logs under logs/npu_smoke/parallel/.
 The final inline actions/upload-artifact step runs even after failure and
 uploads logs/npu_smoke/** as the npu-smoke-logs-<job> artifact.
 
-Some Ascend runtime versions can abort with exit code 134 during allocator
-teardown after a successful workload. The runner accepts 134 only when the
-test-specific positive completion markers are present. Earlier aborts, missing
-markers, and other exit codes remain failures.
-
-For Tests 0, 3, 5, and 6, the shared compatibility rule requires exactly one
-passed pytest case; Test 4 requires exactly two. It also requires no failures,
-errors, or skips in the final summary, only the known
-`corrupted size vs. prev_size` diagnostic after that summary, and exit code
-134. The runner emits a warning and preserves the log. This handles the
-observed CI teardown failure; it does not fix the underlying native memory
-issue.
+Every nonzero test exit, including native abort 134 after a pytest or training
+completion message, remains a failure. Keep the raw exit code and full log
+when reporting a failed run.
