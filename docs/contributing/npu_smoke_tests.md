@@ -9,7 +9,7 @@ into these runners:
 
 - tests/npu_smoke/run_npu_smoke_core.sh runs rollout, worker, and engine checks.
 - tests/npu_smoke/run_npu_smoke_e2e.sh runs end-to-end trainer checks.
-- tests/npu_smoke/run_npu_smoke_tests.sh runs both groups.
+- tests/npu_smoke/run_npu_smoke_tests.sh runs both groups sequentially for local use.
 - tests/npu_smoke/lib_npu_smoke.sh contains shared cleanup, logging, and summaries.
 
 ## Test Cases
@@ -140,19 +140,11 @@ devices, validate it in the test entry point and fail with a clear message.
 
 ### 4. Update workflow groups and paths
 
-The Resolve NPU CI groups step maps labels to groups:
-
-```bash
-declare -A label_groups=(
-  ["ready-for-ci"]="core e2e"
-  ["ci-npu"]="core e2e"
-  ["ci-npu-core"]="core"
-  ["ci-npu-e2e"]="e2e"
-)
-```
-
-Multiple labels produce the union of their groups. The workflow invokes group
-scripts in stable core, then e2e, order.
+The Resolve NPU CI groups step maps labels to groups as listed in
+[CI Triggers](#ci-triggers). Multiple labels produce the union of their groups.
+Selected groups run in separate containers on independent eight-NPU runners,
+in parallel when runner capacity is available. The setup_runner check succeeds
+only when all selected groups pass.
 
 If the new test lives outside current path filters, add its path. Current
 filters include verl_omni/**, tests/npu_smoke/**, tests/agent_loop/**,
@@ -225,8 +217,8 @@ runs both groups.
 
 ## Runtime Environment
 
-The current configuration uses eight NPUs on linux-aarch64-a2b4-8, a 120
-minute timeout, 16 GiB shared memory, and this image:
+Each group job uses eight NPUs on linux-aarch64-a2b4-8, a 120 minute timeout,
+16 GiB shared memory, and this image:
 
 ```text
 swr.cn-north-4.myhuaweicloud.com/mindspeed/pr-verl-omni-a2:v010-vllm030-omni030
@@ -275,8 +267,9 @@ logs/npu_smoke/<group>/<timestamp>/
 Each test writes test_<id>.log and each group writes summary.log. The workflow
 also writes group console logs under logs/npu_smoke/parallel/.
 
-The final inline actions/upload-artifact step runs even after failure and
-uploads logs/npu_smoke/** as the npu-smoke-logs-<job> artifact.
+Each group's actions/upload-artifact step runs even after failure and uploads
+logs/npu_smoke/** as npu-smoke-logs-core or npu-smoke-logs-e2e. A failed group
+does not cancel the other selected group.
 
 Every nonzero test exit, including native abort 134 after a pytest or training
 completion message, remains a failure. Keep the raw exit code and full log
