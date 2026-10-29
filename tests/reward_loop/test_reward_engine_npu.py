@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Real standalone vLLM reward-server startup and OCR scoring on Ascend."""
+"""Ascend port of test_visual_reward_manager.py::test_reward_model_genrm."""
 
 import os
 from pathlib import Path
@@ -21,7 +21,12 @@ import pytest
 
 @pytest.fixture
 def npu_reward_checkpoint(monkeypatch, tmp_path_factory):
-    """Prepare an offline checkpoint and a cold, test-owned vLLM registry cache."""
+    """Prepare a reusable checkpoint and a fresh model-inspection cache.
+
+    NPU_REWARD_MODEL_PATH selects a test-owned checkpoint directory. The builder
+    rejects unrelated or incomplete contents. A fresh VLLM_CACHE_ROOT exercises
+    cold inspection; monkeypatch restores the environment after the test.
+    """
     try:
         requested = int(os.environ.get("NUM_NPUS", "8"))
     except ValueError:
@@ -62,7 +67,12 @@ def npu_reward_checkpoint(monkeypatch, tmp_path_factory):
 
 
 def test_standalone_reward_engine_npu(npu_reward_checkpoint):
-    """Port the GPU GenRM path without starting an actor rollout server."""
+    """Start dedicated TP=2 reward replicas and score three synthetic images.
+
+    Check every /v1/models endpoint, finite (3, 1) OCR scores in [0, 1], and one
+    text response per image. Random weights exercise execution, not OCR quality.
+    Servers stay resident; reward offload and sleep/wake are outside this case.
+    """
     import ray
     import requests
     import torch

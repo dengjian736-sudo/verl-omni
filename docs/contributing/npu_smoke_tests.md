@@ -38,7 +38,8 @@ FSDP2 and sequence-parallel execution are not covered by this NPU case.
 The test checks finite inference log probabilities, training loss, and gradient
 norm; it does not establish GPU/NPU numerical parity or model convergence.
 
-Run only the migrated case from the repository root after sourcing CANN/ATB:
+Run only the migrated case from the repository root after configuring the
+[runtime environment](#runtime-environment):
 
 ```bash
 DEVICE_NAME=npu NUM_NPUS=2 \
@@ -50,27 +51,21 @@ The same case runs through `run_npu_smoke_core.sh` and the combined
 `run_npu_smoke_tests.sh` entry point. Missing hardware or model files fail
 explicitly rather than producing an all-skipped smoke success.
 
-Tests 4-6 reuse the GPU tests' execution and assertions. Test 4 contains two
-pytest cases (`request_execution` and `step_execution`); Tests 5 and 6 each
-contain one. They require an even `NUM_NPUS` of at least 2, use rollout TP=2,
-two agent-loop workers, 256x256 images, and a 10-step denoising schedule with
-the same SDE window as the GPU seed test. Serial requests (`max_num_seqs=1`)
-preserve the seed test's batch-shape constraint. Test 6 keeps the bit-equality
-assertion; it does not substitute approximate equality on NPU.
+### Agent-loop execution and rollout seeds
 
-Use the local checkpoint prepared by the workflow. The transformer head count
-must be divisible by 2, and its `joint_attention_dim` must match the text
-encoder's hidden size. The entry point reports missing hardware or assets as
-failures. It does not rewrite the cached model or download weights at runtime.
-The model can be prepared offline in a separate directory:
+Tests 4-6 reuse the GPU cases to check request/step execution, unseeded rollout
+diversity, and seeded reproducibility. They use tiny Qwen-Image, rollout TP=2,
+and two agent-loop workers. `NUM_NPUS` must be even and at least 2.
+
+The workflow prepares the local checkpoint. For a local run, prepare it first:
 
 ```bash
 python3 tests/special_e2e/build_qwen_image_tiny_random.py \
     --output-dir "${HOME}/.cache/modelscope/hub/models/tiny-random/Qwen-Image"
 ```
 
-After configuring the [runtime environment](#runtime-environment), run just the
-new cases from the repository root:
+After configuring the [runtime environment](#runtime-environment), run these
+cases from the repository root:
 
 ```bash
 export DEVICE_NAME=npu NUM_NPUS=8
@@ -82,57 +77,28 @@ python3 -m pytest -v -s tests/agent_loop/test_diffusion_agent_loop_npu.py
 ```
 
 For a two-device local check, set both visibility variables to `0,1` and
-`NUM_NPUS=2`. The existing core and combined runners also select Tests 4-6.
-Each case owns a fresh local Ray cluster and restores the agent worker factory
-afterward. Every nonzero test exit fails the smoke group.
+`NUM_NPUS=2`. Missing hardware or model files fail the tests.
 
 ### Standalone reward engine
 
-Test 7 ports `tests/reward_loop/test_visual_reward_manager.py::test_reward_model_genrm`.
-It starts reward-model servers through `RewardLoopManager` with a dedicated
-resource pool and `rollout.name=vllm`; no actor rollout server is created.
-A local random Qwen2.5-VL checkpoint exercises model inspection and server
-startup without downloading the full reward model. Each launch uses a new,
-test-owned `VLLM_CACHE_ROOT`, so existing architecture-inspection caches cannot
-hide cold-start failures.
+Test 7 checks standalone vLLM reward-server startup and OCR scoring with a tiny
+random Qwen2.5-VL model generated offline. Eight NPUs run four TP=2 reward
+replicas, without an actor rollout server. This is an execution smoke test.
 
-At eight NPUs the test starts four TP=2 reward replicas, checks each `/v1/models`
-endpoint, and scores three synthetic images through the reward router and the
-existing OCR scorer. It requires finite `(3, 1)` scores in `[0, 1]` and one model
-response per image. Random weights do not test OCR quality or convergence.
-The dedicated servers stay resident (`free_cache_engine=False`); reward-model
-offload and sleep/wake behavior are outside this case. All nonzero exits,
-including native abort 134, remain failures for this entry.
-
-For direct execution, configure the [runtime environment](#runtime-environment)
-before launching Python.
+After configuring the [runtime environment](#runtime-environment), run:
 
 ```bash
 NUM_NPUS=8 python3 -m pytest -v -s tests/reward_loop/test_reward_engine_npu.py
 ```
 
-The pytest fixture builds or reuses its own checkpoint under
-`~/.cache/verl-omni-npu-smoke/Qwen2.5-VL-Reward-NPU`. Set
-`NPU_REWARD_MODEL_PATH` to select another empty output directory owned by this
-test. Existing unrelated or incomplete directories are rejected rather than
-overwritten. The fixture also owns a fresh temporary model-inspection cache
-and restores its environment changes after the test. The core runner invokes
-pytest directly, with no separate end-to-end launcher. Keep the final pytest
-result and process exit code when reporting whether the cold reward-server
-path succeeds on a given environment.
+All nonzero exits, including native abort 134, fail the smoke group.
 
 ### Wan2.2 trainer with a reward model
 
-Test 2 runs one DanceGRPO training step with dedicated actor and reward
-resources. With the default eight NPUs, six devices serve the diffusion actor
-and two serve a TP=2 Qwen2.5-VL reward engine. The workload scores generated
-images through the GenRM OCR scorer and must finish training successfully.
-
-The launcher uses a cached Qwen2.5-VL-3B-Instruct snapshot when available;
-otherwise it selects the Hugging Face model ID. Prepare the checkpoint before
-an offline run and set `REWARD_MODEL_PATH` to its local directory when needed.
-`ACTOR_NUM_NPUS` and `REWARD_NUM_NPUS` override the resource split.
-This trainer path complements Test 7's isolated tiny-model reward assertions.
+Test 2 runs one DanceGRPO training step with six actor NPUs and a dedicated
+TP=2 Qwen2.5-VL reward engine on two NPUs. Prepare the Qwen2.5-VL-3B-Instruct
+checkpoint before an offline run; set `REWARD_MODEL_PATH` to its local directory
+when needed. The test must complete training and exit 0.
 
 ## Add a New NPU Smoke Test
 
@@ -288,9 +254,7 @@ readable library through `ldconfig`; a missing library fails the run. Set
 `JEMALLOC_PATH` for a custom installation.
 
 For direct pytest execution outside a group runner, export `VLLM_PLUGINS=ascend`
-and preload the installed jemalloc library before launching Python. The
-reward fixture supplies device and offline defaults and passes the configured
-`HCCL_NPU_SOCKET_PORT_RANGE` to Ray workers. It defaults to `auto` when unset.
+and preload the installed jemalloc library before launching Python.
 
 The diagnostics and artifact-upload steps are defined directly in the workflow.
 The NPU runner executes the job in a container, so repository-local composite

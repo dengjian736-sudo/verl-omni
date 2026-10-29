@@ -23,7 +23,11 @@ import pytest
 
 @pytest.fixture
 def npu_rollout_config():
-    """Create an isolated NPU Ray cluster and configure local Qwen-Image rollout."""
+    """Configure local TP=2 rollout in a test-owned Ray cluster.
+
+    Validate the existing checkpoint without rebuilding shared assets. Each case
+    shuts down its cluster and restores the shared agent-worker factory.
+    """
     import ray
     import torch
     import torch_npu  # noqa: F401
@@ -83,7 +87,7 @@ def npu_rollout_config():
     rollout.agent.default_agent_loop = "diffusion_single_turn_agent"
     rollout.calculate_log_probs = True
     rollout.full_determinism = False
-    rollout.max_num_seqs = 1
+    rollout.max_num_seqs = 1  # Keep per-request batch shapes fixed for seed comparisons.
     rollout.pipeline.height = 256
     rollout.pipeline.width = 256
     rollout.pipeline.num_inference_steps = 10
