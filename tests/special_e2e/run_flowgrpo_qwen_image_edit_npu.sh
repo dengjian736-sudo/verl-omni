@@ -14,7 +14,8 @@ source "${SCRIPT_DIR}/lib_npu_e2e.sh"
 
 export NUM_GPUS="${NUM_NPUS}"
 export MODEL_PATH="${MODEL_PATH:-${HOME}/.cache/verl-omni-npu-smoke/qwen-image-edit-plus}"
-export DATA_DIR="${DATA_DIR:-${HOME}/data/dummy_image_edit_npu}"
+DATA_DIR="${DATA_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/verl-omni-flowgrpo-edit-npu.XXXXXX")}"
+export DATA_DIR
 unset TRAIN_FILES VAL_FILES
 # The GPU launcher defaults to Hub FA3 at SP=1, which cannot download kernels
 # in the offline NPU environment; select the portable native/SDPA pair (the

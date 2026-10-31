@@ -1,6 +1,6 @@
 # NPU Smoke Tests
 
-Last updated: 10/30/2026.
+Last updated: 10/31/2026.
 
 This guide explains how to add CI test cases for Huawei Ascend devices in verl-omni.
 
@@ -24,7 +24,7 @@ into these runners:
 | 5 | core | Unseeded multi-worker rollout diversity | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_without_seed_npu | 8 |
 | 6 | core | Seeded multi-worker rollout reproducibility | tests/agent_loop/test_diffusion_agent_loop_npu.py::test_rollout_seed_reproducibility_npu | 8 |
 | 7 | core | Standalone vLLM reward engine and OCR scoring | tests/reward_loop/test_reward_engine_npu.py::test_standalone_reward_engine_npu | 8 |
-| 11 | core | Reward restart determinism and JPEG rule scoring | tests/reward_loop/test_reward_engine_npu.py, remaining three cases | 8 |
+| 11 | core | Reward restart determinism and JPEG rule scoring (three pytest cases) | tests/reward_loop/test_reward_engine_npu.py | 8 |
 | 12 | core | Rollout request batching and step contracts | tests/workers/rollout/rollout_vllm/test_vllm_omni_generate_contracts_npu.py | 8 |
 | 13 | core | FSDP/FSDP2 with sequence parallel 2 | tests/workers/test_diffusers_fsdp_engine_sp_npu.py | 8 |
 | 14 | core | Ulysses SP forward/backward equivalence | tests/workers/test_diffusers_ulysses.py via torchrun | 8 |
@@ -40,13 +40,12 @@ into these runners:
 | 25 | e2e | Bagel PickScore LoRA FlowGRPO | tests/special_e2e/run_flowgrpo_bagel_pickscore_npu.sh | 8 |
 | 26 | e2e | FlowGRPO synchronous separate trainer (v0) | tests/special_e2e/run_flowgrpo_qwen_image_separate_npu.sh | 8 |
 | 28 | core | FSDP2 LoRA adapter switch and EMA | tests/workers/test_diffusers_fsdp_lora_adapter.py, fsdp2 parameters | 8 |
-| 30 | e2e | Image previews and H3 device-residency contracts | tests/trainer/diffusion/test_artifact_preview_dump_npu.py and tests/pipelines/test_minimax_h3_meta_output_npu.py | 8 |
+| 30 | core | Image previews and H3 device-residency contracts | tests/trainer/diffusion/test_artifact_preview_dump_npu.py and tests/pipelines/test_minimax_h3_meta_output_npu.py | 8 |
 | 34 | e2e | MiniMax-H3 T2VA FlowGRPO | tests/special_e2e/run_flowgrpo_minimax_h3_npu.sh | 8 |
 
-The combined runner has 26 entries: 13 core and 13 e2e. Entry counts differ
-from pytest case counts and do not imply complete GPU coverage. ID 7 keeps its
-existing reward meaning; H3 uses ID 34. Each selected group still runs in its
-own eight-NPU workflow job.
+The combined runner has 26 entries: 14 core and 12 e2e. Entry counts differ
+from pytest case counts and do not imply complete GPU coverage. Each selected
+group runs in its own eight-NPU workflow job.
 
 Test 3 ports the `fsdp` case of `tests/workers/test_diffusers_fsdp_engine.py`
 (GPU core ID 2). It reuses the GPU test's synthetic trajectories and engine
@@ -109,36 +108,19 @@ After configuring the [runtime environment](#runtime-environment), run:
 NUM_NPUS=8 python3 -m pytest -v -s tests/reward_loop/test_reward_engine_npu.py
 ```
 
-Entry 11 adds restart determinism with one TP=2 or two TP=1 reward replicas,
-plus JPEG rule scoring without a reward server. Determinism requires exact
-score and response equality across two fresh Ray runs. Its tiny fixture uses
-56x56 images and a shorter context than the GPU case.
+Entry 7 selects the standalone startup case. Entry 11 selects the other three
+pytest cases: single-replica determinism, multi-replica determinism, and JPEG
+rule scoring.
 
 All nonzero exits, including native abort 134, fail the smoke group.
 Failure to write a test log also fails the entry.
-
-### Additional migrated cases and limits
-
-Entries 12-15 and 17 reuse the GPU assertions for batching/step trajectories,
-FSDP/SP, Ulysses equivalence, snapshot restoration, and tool execution.
-Entry 28 runs the two FSDP2 scenarios; its two FSDP1 scenarios are explicitly
-deselected because nested LoRA keys are missing on the pinned stack.
-
-Entries 18-26 preserve the GPU trainer paths and update counts; H3 retains
-actor SP=2 and rollout TP=2. Entries 18 and 20 use tiny Qwen2.5-VL rewards
-instead of GPU Qwen3-VL. The NVIDIA process-placement monitor in the GPU
-launchers reused by entries 18 and 25 has no validated NPU equivalent, so
-these do not establish that placement contract. Entry 30 checks preview export and tensor residency.
-
-Other GPU scenarios remain outside this migration. These entries do not imply
-complete GPU coverage.
 
 ### Wan2.2 trainer with a reward model
 
 Test 2 runs one DanceGRPO training step with six actor NPUs and a dedicated
 TP=2 Qwen2.5-VL reward engine on two NPUs. Prepare the Qwen2.5-VL-3B-Instruct
-checkpoint before an offline run; set `REWARD_MODEL_PATH` to its local directory
-when needed. The test must complete training and exit 0.
+checkpoint before an offline run; set `WAN22_REWARD_MODEL_PATH` to its local
+directory when needed. The test must complete training and exit 0.
 
 ## Add a New NPU Smoke Test
 
@@ -156,9 +138,10 @@ Keep tests small and reproducible:
 - Preserve nonzero exit codes on failure.
 - Do not reuse Ray processes left by another test.
 
-The group runner isolates generic model/data overrides between model families;
-entries 1 and 2 generate separate datasets under the current log directory.
-Run an individual launcher to supply its model/data overrides explicitly.
+The group runner isolates generic model/data overrides between model families
+and gives each trainer entry its own data directory under the current log
+directory. Run an individual launcher to supply its model/data overrides
+explicitly.
 
 ### 2. Register the test in its group runner
 
@@ -272,12 +255,9 @@ swr.cn-north-4.myhuaweicloud.com/mindspeed/pr-verl-omni-a2:v010-vllm030-omni030
 The workflow prints CANN details, npu-smi output, relevant Ascend variables,
 and installed vLLM component versions.
 
-The e2e job installs `qwen-vl-utils==0.0.14` without resolving dependencies for
-image-edit data loading. Install it before a local e2e run too:
-
-```bash
-python3 -m pip install --no-deps 'qwen-vl-utils==0.0.14'
-```
+Follow the [NPU installation guide](../start/install_npu.md) for environment
+setup and the [project extras](../start/install.md#extras) for optional runtime
+dependencies.
 
 The FlowGRPO and DanceGRPO end-to-end launchers source CANN and ATB before
 starting the workload:

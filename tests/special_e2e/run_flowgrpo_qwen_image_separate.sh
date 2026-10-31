@@ -58,6 +58,10 @@ module_map = {
 }
 def _hccl_probe_ok():
     try:
+        from verl.utils.device import is_torch_npu_available
+
+        if not is_torch_npu_available(check_device=True):
+            return False
         importlib.import_module("verl.checkpoint_engine.hccl_checkpoint_engine")
         return True
     except Exception:

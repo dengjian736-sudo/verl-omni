@@ -18,7 +18,8 @@ source "${SCRIPT_DIR}/lib_npu_e2e.sh"
 export NUM_GPUS="${NUM_NPUS}"
 export MODEL_PATH="${MODEL_PATH:-${HOME}/.cache/modelscope/hub/models/tiny-random/Qwen-Image}"
 export TOKENIZER_PATH="${MODEL_PATH}/tokenizer"
-export DATA_DIR="${DATA_DIR:-${HOME}/data/dummy_diffusion_separate_npu}"
+DATA_DIR="${DATA_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/verl-omni-flowgrpo-separate-npu.XXXXXX")}"
+export DATA_DIR
 unset TRAIN_FILES VAL_FILES
 
 exec bash "${SCRIPT_DIR}/run_flowgrpo_qwen_image_separate.sh" \

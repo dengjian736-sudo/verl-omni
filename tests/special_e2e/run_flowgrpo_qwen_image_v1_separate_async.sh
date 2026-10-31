@@ -86,8 +86,11 @@ except Exception as e:
     # are mutually exclusive, so probe the HCCL module before failing.
     if backend == "nccl":
         try:
-            importlib.import_module("verl.checkpoint_engine.hccl_checkpoint_engine")
-            sys.exit(0)
+            from verl.utils.device import is_torch_npu_available
+
+            if is_torch_npu_available(check_device=True):
+                importlib.import_module("verl.checkpoint_engine.hccl_checkpoint_engine")
+                sys.exit(0)
         except Exception:
             pass
     print(f"Checkpoint backend '{backend}' could not be imported: {e}", file=sys.stderr)

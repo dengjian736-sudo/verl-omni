@@ -13,7 +13,11 @@ sep() { printf '%0.s-' {1..78}; echo; }
 
 NPU_SMOKE_GROUP="${NPU_SMOKE_GROUP:?NPU_SMOKE_GROUP must be set}"
 TIMESTAMP="$(date '+%Y%m%d_%H%M%S')"
-LOG_DIR="${LOG_DIR:-${REPO_ROOT}/logs/npu_smoke/${NPU_SMOKE_GROUP}/${TIMESTAMP}}"
+if [[ -z "${LOG_DIR:-}" ]]; then
+    NPU_SMOKE_LOG_ROOT="${REPO_ROOT}/logs/npu_smoke/${NPU_SMOKE_GROUP}"
+    mkdir -p "${NPU_SMOKE_LOG_ROOT}"
+    LOG_DIR="$(mktemp -d "${NPU_SMOKE_LOG_ROOT}/${TIMESTAMP}.XXXXXX")"
+fi
 mkdir -p "${LOG_DIR}"
 SUMMARY_LOG="${LOG_DIR}/summary.log"
 

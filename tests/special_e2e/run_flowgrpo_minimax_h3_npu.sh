@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib_npu_e2e.sh"
 
 MINIMAX_H3_MODEL_PATH=${MINIMAX_H3_MODEL_PATH:-${HOME}/models/tiny-random/minimax-h3-npu-offline}
+MINIMAX_H3_DATA_DIR="${MINIMAX_H3_DATA_DIR:-${DATA_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/verl-omni-minimax-h3-npu.XXXXXX")}}"
 python3 "${SCRIPT_DIR}/build_minimax_h3_tiny_random.py" --offline --output-dir "${MINIMAX_H3_MODEL_PATH}"
 
 python3 "${SCRIPT_DIR}/run_flowgrpo_minimax_h3_tiny.py" \
@@ -16,7 +17,7 @@ python3 "${SCRIPT_DIR}/run_flowgrpo_minimax_h3_tiny.py" \
     --rollout-tp 2 \
     --total-steps 1 \
     --tiny-model-dir "${MINIMAX_H3_MODEL_PATH}" \
-    --data-dir "${MINIMAX_H3_DATA_DIR:-${HOME}/data/dummy_minimax_h3_npu}" \
+    --data-dir "${MINIMAX_H3_DATA_DIR}" \
     --output-dir "${MINIMAX_H3_OUTPUT_DIR:-${SCRIPT_DIR}/../../outputs/flowgrpo_minimax_h3_npu}" \
     "$@"
 

@@ -30,7 +30,8 @@ export NUM_GPUS="${NUM_NPUS}"
 export MODEL_PATH="${MODEL_PATH:-${HOME}/.cache/verl-omni-npu-smoke/sd3-teacher-smoke-student}"
 export TEACHER_PATH="${TEACHER_PATH:-${HOME}/.cache/verl-omni-npu-smoke/sd3-teacher-smoke-teacher}"
 export TEACHER2_PATH="${TEACHER2_PATH:-${HOME}/.cache/verl-omni-npu-smoke/sd3-teacher-smoke-teacher2}"
-export DATA_DIR="${DATA_DIR:-${HOME}/data/dummy_diffusion_teacher_npu}"
+DATA_DIR="${DATA_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/verl-omni-diffusion-teacher-npu.XXXXXX")}"
+export DATA_DIR
 unset TRAIN_FILES VAL_FILES
 
 exec bash "${SCRIPT_DIR}/run_diffusion_teacher_smoke.sh" \

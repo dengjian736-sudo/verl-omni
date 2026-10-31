@@ -25,11 +25,11 @@ from pathlib import Path
 import pytest
 
 
-def _npu_ray_runtime_env() -> dict:
+def _npu_ray_runtime_env(requested: int) -> dict:
     """Ray runtime env mirroring the GPU hook plus Ascend visibility settings."""
     from tests.agent_loop.test_omni_agent_loop_worker_gpu import _register_vllm_omni_rollout_on_ray_worker
 
-    visible_devices = os.getenv("ASCEND_RT_VISIBLE_DEVICES", "0,1")
+    visible_devices = os.getenv("ASCEND_RT_VISIBLE_DEVICES") or ",".join(str(i) for i in range(requested))
     return {
         "worker_process_setup_hook": _register_vllm_omni_rollout_on_ray_worker,
         "env_vars": {
@@ -173,4 +173,4 @@ def test_omni_agent_loop_worker_image_gen_generate_sequences_npu(npu_omni_config
     from tests.agent_loop.test_omni_agent_loop_worker_gpu import run_omni_agent_loop_image_gen
 
     config, _run_root = npu_omni_config
-    run_omni_agent_loop_image_gen(config, _npu_ray_runtime_env())
+    run_omni_agent_loop_image_gen(config, _npu_ray_runtime_env(config.trainer.n_gpus_per_node))
