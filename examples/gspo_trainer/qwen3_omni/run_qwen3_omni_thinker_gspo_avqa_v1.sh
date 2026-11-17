@@ -44,7 +44,7 @@ python3 -m verl_omni.trainer.main_omni \
     data.custom_cls.name=QwenOmniRLHFDataset \
     ++data.mm_processor_kwargs.sampling_rate=16000 \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
-    +actor_rollout_ref.model.override_config.attn_implementation=sdpa \
+    +actor_rollout_ref.model.override_config.attn_implementation=flash_attention_2 \
     actor_rollout_ref.model.lora_rank=0 \
     actor_rollout_ref.model.enable_gradient_checkpointing=true \
     actor_rollout_ref.model.use_remove_padding=true \
